@@ -2071,7 +2071,7 @@ components:
         - url
         - title
         - source
-        - image
+        - body
       properties:
         uri:
           type: string

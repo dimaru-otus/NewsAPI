@@ -16,7 +16,6 @@ let client = Client(
     serverURL: try Servers.server1(),
     transport: URLSessionTransport(configuration: .init(session: URLSession(configuration: configuration))),
     middlewares: [
-        AuthenticationMiddleware(token: BuildEnvironment.rapidApiKey),
         LoggingMiddleware(loggingPolicy: .full),
     ]
 )
@@ -26,8 +25,7 @@ let client = Client(
     serverURL: try Servers.server1(),
     transport: URLSessionTransport(),
     middlewares: [
-        AuthenticationMiddleware(token: BuildEnvironment.newsApiKey),
-//        LoggingMiddleware(loggingPolicy: .full),
+        LoggingMiddleware(loggingPolicy: .brief),
     ]
 )
 #endif
@@ -35,32 +33,38 @@ let client = Client(
 print(try! Servers.server1())
 
 do {
-    let response = try await client.getArticles(query: .init(apiKey: BuildEnvironment.newsApiKey,
-                                                             resultType: .articles,
-                                                             articlesPage: 1,
-                                                             articlesCount: 20,
-                                                             articlesSortBy: .date,
-                                                             articlesSortByAsc: false,
-                                                             articleBodyLen: -1,
-                                                             conceptUri: ["https://en.wikipedia.org/wiki/Isaac_Newton"],
-                                                             lang: [.eng],
-                                                             includeArticleBody: false,
-                                                             includeArticleLinks: true
-                                                            ),
-                                                
-                                                headers: .init())
+    let query = Operations.getArticles.Input.Query(
+        apiKey: BuildEnvironment.newsApiKey,
+        resultType: .articles,
+        articlesPage: 1,
+        articlesCount: 20,
+        articlesSortBy: .date,
+        articlesSortByAsc: false,
+        articleBodyLen: -1,
+        keyword: ["apple", "iphone"],
+        lang: [.eng],
+        includeArticleBody: true,
+        includeArticleImage: true,
+        includeArticleLinks: true
+    )
+    let response = try await client.getArticles(query: query)
             
     switch(response) {
-        
     case .ok(let okResponce):
-        let pagination = try! okResponce.body.json.value1.articles.value1
+        let pagination: NewsAPI.Components.Schemas.MultipleItems = try! okResponce.body.json.value1.articles.value1
         print("Pagination:", pagination)
-        let results: [NewsAPI.Components.Schemas.Article] = okResponce.body.json.value1.articles.value2.results
+        let results: [NewsAPI.Components.Schemas.Article] = try! okResponce.body.json.value1.articles.value2.results
         print("Articles:", results)
-    case .undocumented(statusCode: let statusCode, _):
-        print("error: \(statusCode)")
+    case .undocumented(let statusCode, let payload):
+        print("Request error:", statusCode, "message:", try await String(collecting: payload.body!, upTo: 1024))
     }
-//    print(response)
 } catch {
-    print(error)
+    switch error {
+    case let decodingError as DecodingError:
+        print("Decoding error:", decodingError.localizedDescription)
+    case let clientError as ClientError:
+        print("Underlying:", clientError.underlyingError.localizedDescription)
+    default:
+        print("Unknown error:", error)
+    }
 }
